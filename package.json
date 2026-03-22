@@ -1,0 +1,40 @@
+{
+  "name": "@listenai/openclaw-lsplatform",
+  "version": "0.1.0",
+  "description": "OpenClaw plugin — LSPlatform channel for persistent device connectivity",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "openclaw-lsplatform": "dist/install.js"
+  },
+  "files": [
+    "dist",
+    "openclaw.plugin.json"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "openclaw",
+    "openclaw-plugin",
+    "lsplatform",
+    "listenai"
+  ],
+  "author": "LISTENAI",
+  "license": "MIT",
+  "peerDependencies": {
+    "openclaw": ">=2026.1.29"
+  },
+  "dependencies": {
+    "@clack/prompts": "^1.1.0",
+    "@sinclair/typebox": "^0.34.48",
+    "ws": "^8.19.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.18.0",
+    "typescript": "^5.7.0"
+  }
+}

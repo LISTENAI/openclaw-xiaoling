@@ -1,0 +1,48 @@
+{
+  "id": "lsplatform",
+  "name": "LSPlatform",
+  "description": "Connect OpenClaw to LSPlatform for persistent device messaging via WebSocket.",
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "apiToken": {
+        "type": "string",
+        "description": "LSPlatform API token (obtained via pairing)"
+      },
+      "wsUrl": {
+        "type": "string",
+        "description": "LSPlatform WebSocket endpoint",
+        "default": "wss://lsplatform.listenai.com/ws"
+      },
+      "apiUrl": {
+        "type": "string",
+        "description": "LSPlatform REST API base URL",
+        "default": "https://lsplatform.listenai.com/api"
+      },
+      "enabled": {
+        "type": "boolean",
+        "description": "Enable this channel",
+        "default": true
+      }
+    },
+    "required": [],
+    "additionalProperties": false
+  },
+  "uiHints": {
+    "apiToken": {
+      "label": "API Token",
+      "placeholder": "Obtained via pairing flow",
+      "sensitive": true
+    },
+    "wsUrl": {
+      "label": "WebSocket URL",
+      "placeholder": "wss://lsplatform.listenai.com/ws",
+      "advanced": true
+    },
+    "apiUrl": {
+      "label": "API URL",
+      "placeholder": "https://lsplatform.listenai.com/api",
+      "advanced": true
+    }
+  }
+}
