@@ -1,0 +1,12 @@
+{
+  "id": "openclaw-xiaoling",
+  "name": "小聆 AI",
+  "description": "OpenClaw × 小聆 AI 插件",
+  "channels": [
+    "openclaw-xiaoling"
+  ],
+  "configSchema": {
+    "type": "object",
+    "properties": {}
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "name": "@listenai/openclaw-xiaoling",
+  "version": "0.1.0",
+  "description": "OpenClaw × 小聆 AI 插件",
+  "type": "module",
+  "author": "LISTENAI",
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc --noEmit && tsdown",
+    "dev": "tsdown -w",
+    "prepublishOnly": "npm run build"
+  },
+  "bin": "dist/install.mjs",
+  "files": [
+    "dist",
+    "openclaw.plugin.json"
+  ],
+  "openclaw": {
+    "extensions": [
+      "dist/index.mjs"
+    ],
+    "channel": {
+      "id": "openclaw-xiaoling",
+      "label": "小聆 AI",
+      "selectionLabel": "小聆 AI",
+      "blurb": "OpenClaw × 小聆 AI"
+    }
+  },
+  "dependencies": {
+    "@sinclair/typebox": "^0.34.48",
+    "ws": "^8.20.0"
+  },
+  "devDependencies": {
+    "@tsconfig/node24": "^24.0.4",
+    "@tsconfig/strictest": "^2.0.8",
+    "@types/node": "^24.12.0",
+    "@types/ws": "^8.18.1",
+    "openclaw": "^2026.4.1",
+    "tsdown": "^0.21.4",
+    "typescript": "^5.9.3"
+  }
+}

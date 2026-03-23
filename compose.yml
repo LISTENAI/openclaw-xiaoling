@@ -1,0 +1,16 @@
+services:
+  openclaw:
+    image: ghcr.io/openclaw/openclaw:2026.4.1-slim
+    restart: unless-stopped
+    ports:
+      - '18789:18789'
+    volumes:
+      - .openclaw:/home/node/.openclaw
+      - ./dist:/home/node/.openclaw/extensions/openclaw-xiaoling/dist
+      - ./openclaw.plugin.json:/home/node/.openclaw/extensions/openclaw-xiaoling/openclaw.plugin.json
+      - ./package.json:/home/node/.openclaw/extensions/openclaw-xiaoling/package.json
+      - ./package-lock.json:/home/node/.openclaw/extensions/openclaw-xiaoling/package-lock.json
+    tmpfs:
+      - /tmp
+      - /home/node/.npm
+      - /home/node/.openclaw/extensions/openclaw-xiaoling/node_modules
