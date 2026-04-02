@@ -19,6 +19,7 @@
     "extensions": [
       "dist/index.mjs"
     ],
+    "setupEntry": "dist/setup-entry.mjs",
     "channel": {
       "id": "openclaw-xiaoling",
       "label": "小聆 AI",
