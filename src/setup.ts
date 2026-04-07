@@ -1,16 +1,25 @@
-import type { ChannelSetupWizard, ChannelSetupAdapter } from 'openclaw/plugin-sdk/setup';
-import { createPatchedAccountSetupAdapter, patchScopedAccountConfig } from 'openclaw/plugin-sdk/setup';
+import {
+  createPatchedAccountSetupAdapter,
+  DEFAULT_ACCOUNT_ID,
+  patchScopedAccountConfig,
+  type ChannelSetupAdapter,
+  type ChannelSetupWizard,
+} from 'openclaw/plugin-sdk/setup';
 
-import { exchangeCode } from '@/api/client';
+import { authExchange } from '@/api';
 import { CHANNEL_ID } from '@/constants';
 import { configAdapter } from '@/config';
+import type { XiaolingChannelConfig } from '@/types';
 
 export const setupWizard: ChannelSetupWizard = {
   channel: CHANNEL_ID,
+  resolveAccountIdForConfigure: () => DEFAULT_ACCOUNT_ID,
 
   status: {
-    configuredLabel: 'configured',
-    unconfiguredLabel: 'needs setup',
+    configuredLabel: '已绑定',
+    unconfiguredLabel: '未绑定',
+    configuredHint: '已绑定，选择修改',
+    unconfiguredHint: '未绑定',
     resolveConfigured({ cfg }) {
       const ids = configAdapter.listAccountIds(cfg);
       return ids.some((id) => {
@@ -26,12 +35,11 @@ export const setupWizard: ChannelSetupWizard = {
   textInputs: [
     {
       inputKey: 'code',
-      message: '请输入6位验证码 (从 LSPlatform 获取)',
-      placeholder: '000000',
+      message: '请输入小程序中显示的8位配对码',
       required: true,
       validate({ value }) {
-        if (!/^\d{6}$/.test(value)) {
-          return '验证码必须是6位数字';
+        if (!/^[0-9A-Z]{8}$/.test(value)) {
+          return '配对码必须是8位数字或大写字母';
         }
         return undefined;
       },
@@ -42,13 +50,23 @@ export const setupWizard: ChannelSetupWizard = {
     const code = credentialValues.code;
     if (!code) return;
 
-    const result = await exchangeCode(code);
+    const result = await authExchange(code);
 
     const nextCfg = patchScopedAccountConfig({
       cfg,
       channelKey: CHANNEL_ID,
       accountId,
-      patch: { apiToken: result.apiToken },
+      patch: {
+        enabled: true,
+        accounts: {
+          [accountId]: {
+            apiToken: result.api_token,
+            productId: result.product_id,
+            deviceId: result.device_id,
+            enabled: true,
+          },
+        },
+      } satisfies Partial<XiaolingChannelConfig>,
       ensureChannelEnabled: true,
       ensureAccountEnabled: true,
     });
@@ -59,11 +77,5 @@ export const setupWizard: ChannelSetupWizard = {
 
 export const setupAdapter: ChannelSetupAdapter = createPatchedAccountSetupAdapter({
   channelKey: CHANNEL_ID,
-  ensureChannelEnabled: true,
-  ensureAccountEnabled: true,
-  buildPatch(input) {
-    return {
-      ...(input.token ? { apiToken: input.token } : {}),
-    };
-  },
+  buildPatch: () => ({}),
 });

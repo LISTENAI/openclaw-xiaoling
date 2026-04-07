@@ -29,6 +29,7 @@
   },
   "dependencies": {
     "@sinclair/typebox": "^0.34.48",
+    "ky": "^2.0.0",
     "ws": "^8.20.0"
   },
   "devDependencies": {

@@ -1,8 +1,8 @@
 import WebSocket from 'ws';
 import type { ChannelPlugin } from 'openclaw/plugin-sdk/core';
 
-import { getWsUrl } from '@/api/client';
-import type { WsInbound, WsOutbound } from '@/api/types';
+import { getWsUrl } from '@/api';
+import type { WsInbound, WsOutbound } from '@/api';
 import { CHANNEL_ID } from '@/constants';
 import { registerConnection, unregisterConnection, handleToolResult } from '@/connection';
 import type { XiaolingAccount } from '@/types';

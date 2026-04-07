@@ -1,6 +1,6 @@
 import type WebSocket from 'ws';
 
-import type { WsOutbound } from '@/api/types';
+import type { WsOutbound } from '@/api';
 
 interface PendingRequest {
   resolve: (data: unknown) => void;

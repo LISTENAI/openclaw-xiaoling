@@ -12,6 +12,8 @@ const base = createChannelPluginBase<XiaolingAccount>({
   meta: {
     label: '小聆 AI',
     selectionLabel: '小聆 AI',
+    docsPath: '',
+    docsLabel: '',
     blurb: 'OpenClaw × 小聆 AI',
   },
 
