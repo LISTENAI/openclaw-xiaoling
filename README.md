@@ -25,14 +25,8 @@ npx -y @listenai/openclaw-xiaoling install
     docker compose exec openclaw openclaw devices approve xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
     ```
 
-3. 以 watch 模式运行
+3. 添加 channel
 
     ```sh
-    npm run dev
-    ```
-
-4. 将插件安装到本地 OpenClaw 实例
-
-    ```sh
-    docker compose exec openclaw openclaw bash -c 'cd /home/node/.openclaw/extensions/openclaw-xiaoling && npm ci --omit=dev'
+    docker compose exec openclaw openclaw channels add --channel openclaw-xiaoling
     ```

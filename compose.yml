@@ -7,10 +7,27 @@ services:
     volumes:
       - .openclaw:/home/node/.openclaw
       - ./dist:/home/node/.openclaw/extensions/openclaw-xiaoling/dist
+      - ./node_modules:/home/node/.openclaw/extensions/openclaw-xiaoling/node_modules
       - ./openclaw.plugin.json:/home/node/.openclaw/extensions/openclaw-xiaoling/openclaw.plugin.json
       - ./package.json:/home/node/.openclaw/extensions/openclaw-xiaoling/package.json
-      - ./package-lock.json:/home/node/.openclaw/extensions/openclaw-xiaoling/package-lock.json
     tmpfs:
       - /tmp
-      - /home/node/.npm
-      - /home/node/.openclaw/extensions/openclaw-xiaoling/node_modules
+    depends_on:
+      plugin:
+        condition: service_healthy
+  plugin:
+    image: node:24-bookworm
+    working_dir: /app
+    volumes:
+      - ./dist:/app/dist
+      - ./node_modules:/app/node_modules
+      - ./src:/app/src
+      - ./package.json:/app/package.json
+      - ./package-lock.json:/app/package-lock.json
+      - ./tsconfig.json:/app/tsconfig.json
+      - ./tsdown.config.ts:/app/tsdown.config.ts
+    command: sh -c 'npm install && npm run dev'
+    healthcheck:
+      test: ['CMD', 'test', '-f', '/app/dist/index.mjs']
+      interval: 2s
+      retries: 30
