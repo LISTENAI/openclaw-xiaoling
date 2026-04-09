@@ -2,9 +2,9 @@ import WebSocket from 'ws';
 import type { ChannelPlugin } from 'openclaw/plugin-sdk/core';
 
 import { getWsUrl } from '@/api';
-import type { WsInbound, WsOutbound } from '@/api';
+import type { InboundFrame, MessageFrame, ReplyStreamFrame } from '@/api';
 import { CHANNEL_ID } from '@/constants';
-import { registerConnection, unregisterConnection, handleToolResult } from '@/connection';
+import { registerConnection, unregisterConnection, handleMcpResult } from '@/connection';
 import type { XiaolingAccount } from '@/types';
 
 type GatewayAdapter = NonNullable<ChannelPlugin<XiaolingAccount>['gateway']>;
@@ -103,19 +103,23 @@ function connectAndListen(ctx: GatewayContext): Promise<void> {
         return;
       }
 
-      if (msg.type === 'ping') {
-        // Reply with ack per protocol
+      const frame = msg as unknown as InboundFrame;
+
+      if (frame.type === 'ping') {
         const ack = {
           type: 'ack',
-          headers: { request_id: msg.headers?.request_id ?? '' },
-          payload: { code: 0, message: 'ok', ...(msg.payload?.ts != null ? { ts: msg.payload.ts } : {}) },
+          headers: { request_id: frame.headers?.request_id ?? '' },
+          payload: { code: 0, message: 'ok', ...(frame.payload?.ts != null ? { ts: frame.payload.ts } : {}) },
         };
         ws.send(JSON.stringify(ack));
-      } else if (msg.type === 'message') {
-        handleInboundMessage(ctx, ws, msg as WsInbound & { type: 'message' });
-      } else if (msg.type === 'tool_result') {
-        const tr = msg as WsInbound & { type: 'tool_result' };
-        handleToolResult(accountId, tr.requestId, tr.data);
+      } else if (frame.type === 'message') {
+        handleInboundMessage(ctx, ws, frame);
+      } else if (frame.type === 'mcp') {
+        if (frame.payload.name === 'tool.result') {
+          handleMcpResult(accountId, frame.headers.request_id, frame.payload.result);
+        }
+      } else if (frame.type === 'error') {
+        log?.error?.(`Server error: ${frame.payload.code} ${frame.payload.message}`);
       }
     });
 
@@ -163,10 +167,23 @@ function connectAndListen(ctx: GatewayContext): Promise<void> {
   return lifetimePromise;
 }
 
+function extractBody(frame: MessageFrame): string {
+  const { payload } = frame;
+  if (payload.message_type === 'text') {
+    return payload.text.content;
+  } else if (payload.message_type === 'mixed') {
+    return payload.mixed.items
+      .filter((i) => i.message_type === 'text')
+      .map((i) => i.text?.content ?? '')
+      .join('\n');
+  }
+  return '';
+}
+
 function handleInboundMessage(
   ctx: GatewayContext,
   ws: WebSocket,
-  msg: Extract<WsInbound, { type: 'message' }>,
+  frame: MessageFrame,
 ): void {
   const { cfg, accountId, log } = ctx;
   const runtime = ctx.channelRuntime;
@@ -176,40 +193,58 @@ function handleInboundMessage(
     return;
   }
 
+  const { payload } = frame;
+  const requestId = frame.headers.request_id;
+  const streamId = `stream-${requestId}`;
+
   const route = runtime.routing.resolveAgentRoute({
     cfg,
     channel: CHANNEL_ID,
     accountId,
-    peer: { kind: 'direct', id: msg.senderId },
+    peer: { kind: 'direct', id: payload.sender.id },
   });
 
   const msgCtx = runtime.reply.finalizeInboundContext({
-    Body: msg.text,
-    From: msg.senderId,
+    Body: extractBody(frame),
+    From: payload.sender.id,
     To: accountId,
     SessionKey: route.sessionKey,
     AccountId: accountId,
     Channel: CHANNEL_ID,
     ChatType: 'direct',
     Provider: CHANNEL_ID,
-    MessageSid: msg.messageId,
+    MessageSid: payload.message_id,
   });
 
   void runtime.reply.dispatchReplyWithBufferedBlockDispatcher({
     ctx: msgCtx,
     cfg,
     dispatcherOptions: {
-      deliver: async (payload) => {
-        const text = payload.text ?? '';
+      deliver: async (deliverPayload) => {
+        const text = deliverPayload.text ?? '';
         if (!text) return;
-        const outbound: WsOutbound = {
+        const replyFrame: ReplyStreamFrame = {
           type: 'reply',
-          messageId: msg.messageId,
-          text,
+          headers: { request_id: requestId },
+          payload: {
+            reply_type: 'stream',
+            stream: { stream_id: streamId, finished: false, content: text },
+          },
         };
-        ws.send(JSON.stringify(outbound));
+        ws.send(JSON.stringify(replyFrame));
       },
     },
+  }).then(() => {
+    // Send finished frame
+    const finalFrame: ReplyStreamFrame = {
+      type: 'reply',
+      headers: { request_id: requestId },
+      payload: {
+        reply_type: 'stream',
+        stream: { stream_id: streamId, finished: true, content: '' },
+      },
+    };
+    ws.send(JSON.stringify(finalFrame));
   }).catch((err) => {
     log?.error?.(`Failed to dispatch reply: ${err}`);
   });
