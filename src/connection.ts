@@ -90,3 +90,15 @@ export function handleMcpResult(accountId: string, requestId: string, data: unkn
   entry.pending.delete(requestId);
   pending.resolve(data);
 }
+
+export function handleRequestError(accountId: string, requestId: string, code: string, message: string): void {
+  const entry = connections.get(accountId);
+  if (!entry) return;
+
+  const pending = entry.pending.get(requestId);
+  if (!pending) return;
+
+  clearTimeout(pending.timer);
+  entry.pending.delete(requestId);
+  pending.reject(new Error(`${code}: ${message}`));
+}

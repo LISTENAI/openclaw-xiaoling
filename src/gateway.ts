@@ -4,7 +4,7 @@ import type { ChannelPlugin } from 'openclaw/plugin-sdk/core';
 import { getWsUrl } from '@/api';
 import type { InboundFrame, MessageFrame, ReplyStreamFrame } from '@/api';
 import { CHANNEL_ID } from '@/constants';
-import { registerConnection, unregisterConnection, handleMcpResult } from '@/connection';
+import { registerConnection, unregisterConnection, handleMcpResult, handleRequestError } from '@/connection';
 import type { XiaolingAccount } from '@/types';
 
 type GatewayAdapter = NonNullable<ChannelPlugin<XiaolingAccount>['gateway']>;
@@ -121,6 +121,9 @@ function connectAndListen(ctx: GatewayContext): Promise<void> {
       } else if (frame.type === 'error') {
         log?.error?.(`Server error: ${frame.payload.code} ${frame.payload.message}`);
         ctx.setStatus({ accountId, lastError: `${frame.payload.code}: ${frame.payload.message}` });
+        if (frame.headers.request_id) {
+          handleRequestError(accountId, frame.headers.request_id, frame.payload.code, frame.payload.message);
+        }
       }
     });
 
