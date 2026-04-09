@@ -18,7 +18,7 @@ export const toolFactory: OpenClawPluginToolFactory = () => [
       if (!accountId) {
         throw new Error('No active xiaoling device connection');
       }
-      const result = await sendMcpRequest(accountId, 'tool.call', { tool: 'camera.describe', ...params });
+      const result = await sendMcpRequest(accountId, { tool: 'camera.describe', ...params });
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(result) }],
         details: result,
