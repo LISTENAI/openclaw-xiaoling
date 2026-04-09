@@ -37,6 +37,15 @@ export const channelPlugin = createChatChannelPlugin<XiaolingAccount>({
       chatTypes: ['direct'],
       media: true,
     },
+
+    status: {
+      buildAccountSnapshot: ({ account, runtime }) => ({
+        ...runtime,
+        accountId: account.accountId!,
+        configured: configAdapter.isConfigured(account),
+        enabled: configAdapter.isEnabled(account),
+      }),
+    },
   },
 
   security: {

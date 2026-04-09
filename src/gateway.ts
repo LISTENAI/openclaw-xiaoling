@@ -82,13 +82,12 @@ function connectAndListen(ctx: GatewayContext): Promise<void> {
         connected: true,
         running: true,
         lastConnectedAt: Date.now(),
+        lastError: null,
       });
 
       // Send initial ping immediately, then every 30s
       sendPing();
       pingInterval = setInterval(sendPing, 30_000);
-
-
     });
 
     ws.on('message', (raw) => {
@@ -113,6 +112,7 @@ function connectAndListen(ctx: GatewayContext): Promise<void> {
         };
         ws.send(JSON.stringify(ack));
       } else if (frame.type === 'message') {
+        ctx.setStatus({ accountId, lastInboundAt: Date.now() });
         handleInboundMessage(ctx, ws, frame);
       } else if (frame.type === 'mcp') {
         if (frame.payload.name === 'tool.result') {
@@ -120,6 +120,7 @@ function connectAndListen(ctx: GatewayContext): Promise<void> {
         }
       } else if (frame.type === 'error') {
         log?.error?.(`Server error: ${frame.payload.code} ${frame.payload.message}`);
+        ctx.setStatus({ accountId, lastError: `${frame.payload.code}: ${frame.payload.message}` });
       }
     });
 
@@ -245,6 +246,7 @@ function handleInboundMessage(
       },
     };
     ws.send(JSON.stringify(finalFrame));
+    ctx.setStatus({ accountId, lastOutboundAt: Date.now() });
   }).catch((err) => {
     log?.error?.(`Failed to dispatch reply: ${err}`);
   });
