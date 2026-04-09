@@ -8,134 +8,120 @@ export interface ApiEnvelope<T> {
   data: T;
 }
 
-// ── WebSocket v1 协议帧类型 ──
-
-export interface WsHeaders {
-  request_id: string;
-}
-
-// 下行帧 (OpenClaw → 网关)
-
-export interface PingFrame {
-  type: 'ping';
-  headers: WsHeaders;
-  payload: { ts: number };
-}
-
-export interface AckFrame {
-  type: 'ack';
-  headers: WsHeaders;
-  payload: { code: number; message: string; ts?: number };
-}
-
-export interface ReplyStreamFrame {
-  type: 'reply';
-  headers: WsHeaders;
-  payload: {
-    reply_type: 'stream';
-    stream: {
-      stream_id: string;
-      finished: boolean;
-      content: string;
-      items?: Array<{
-        message_type: 'image';
-        image: { base64: string; md5: string };
-      }>;
-    };
+export interface WsFrame<T extends string, P> {
+  type: T;
+  headers: {
+    request_id: string;
   };
-}
-
-export interface McpOutboundFrame {
-  type: 'mcp';
-  headers: WsHeaders;
-  payload: {
-    name: string;
-    arguments: Record<string, unknown>;
-  };
-}
-
-// 上行帧 (网关 → OpenClaw)
-
-export interface Sender {
-  id: string;
-}
-
-interface MessagePayloadBase {
-  message_id: string;
-  conversation_id: string;
-  session_id: string;
-  sender: Sender;
-  timestamp: number;
-}
-
-export interface TextMessagePayload extends MessagePayloadBase {
-  message_type: 'text';
-  text: { content: string };
-}
-
-export interface ImageMessagePayload extends MessagePayloadBase {
-  message_type: 'image';
-  image: { url: string; decrypt_key: string; mime_type?: string };
-}
-
-export interface MixedItem {
-  message_type: string;
-  text?: { content: string };
-  image?: { url: string; decrypt_key: string };
-}
-
-export interface MixedMessagePayload extends MessagePayloadBase {
-  message_type: 'mixed';
-  mixed: { items: MixedItem[] };
-}
-
-export type MessagePayload =
-  | TextMessagePayload
-  | ImageMessagePayload
-  | MixedMessagePayload;
-
-export interface MessageFrame {
-  type: 'message';
-  headers: WsHeaders;
-  payload: MessagePayload;
-}
-
-export interface EventFrame {
-  type: 'event';
-  headers: WsHeaders;
-  payload: {
-    event_id: string;
-    conversation_id: string;
-    session_id: string;
-    timestamp: number;
-    event_type: string;
-    actor: { id: string };
-  };
-}
-
-export interface McpInboundFrame {
-  type: 'mcp';
-  headers: WsHeaders;
-  payload: {
-    name: string;
-    result?: unknown;
-    [key: string]: unknown;
-  };
-}
-
-export interface ErrorFrame {
-  type: 'error';
-  headers: WsHeaders;
-  payload: { code: string; message: string };
+  payload: P;
 }
 
 export type InboundFrame =
-  | AckFrame
-  | ErrorFrame
-  | MessageFrame
-  | EventFrame
-  | McpInboundFrame
-  | PingFrame;
+  AckFrame |
+  TextMessageFrame |
+  ImageMessageFrame |
+  FileMessageFrame |
+  MixedMessageFrame |
+  EventFrame |
+  McpToolResultFrame |
+  ErrorFrame;
+
+export type OutboundFrame =
+  PingFrame |
+  ReplyFrame |
+  McpToolCallFrame;
+
+export type PingFrame = WsFrame<'ping', {
+  ts: number;
+}>;
+
+export type AckFrame = WsFrame<'ack', {
+  code: number;
+  message: string;
+}>;
+
+export type MessageFrame<T extends string, P> = WsFrame<'message', {
+  message_id: string;
+  conversation_id: string;
+  session_id: string;
+  sender: { id: string };
+  timestamp: number;
+  message_type: T;
+} & P>;
+
+export type TextMessageFrame = MessageFrame<'text', {
+  text: {
+    content: string;
+  };
+}>;
+
+export type ImageMessageFrame = MessageFrame<'image', {
+  image: {
+    url: string;
+    decrypt_key?: string;
+    mime_type: string;
+  };
+}>;
+
+export type FileMessageFrame = MessageFrame<'file', {
+  file: {
+    url: string;
+    decrypt_key?: string;
+    file_name: string;
+    mime_type: string;
+    size: number;
+  };
+}>;
+
+export type MixedMessageFrame = MessageFrame<'mixed', {
+  mixed: {
+    items: (
+      Pick<TextMessageFrame['payload'], 'message_type' | 'text'> |
+      Pick<ImageMessageFrame['payload'], 'message_type' | 'image'> |
+      Pick<FileMessageFrame['payload'], 'message_type' | 'file'>
+    )[];
+  };
+}>;
+
+export type EventFrame = WsFrame<'event', {
+  event_id: string;
+  conversation_id: string;
+  session_id: string;
+  timestamp: number;
+  event_type: string;
+  actor: { id: string };
+}>;
+
+export type ReplyFrame = WsFrame<'reply', {
+  reply_type: 'stream';
+  stream: {
+    stream_id: string;
+    finished: boolean;
+    content: string;
+    items?: {
+      message_type: 'image';
+      image: {
+        base64: string;
+        md5: string;
+      };
+    }[];
+  };
+}>;
+
+export type McpToolCallFrame = WsFrame<'mcp', {
+  name: 'tool.call';
+  arguments: Record<string, unknown>;
+}>;
+
+export type McpToolResultFrame = WsFrame<'mcp', {
+  name: 'tool.result';
+  result: unknown;
+}>;
+
+export type ErrorFrame = WsFrame<'error', {
+  code: string;
+  message: string;
+}>;
 
 export async function authExchange<T = {
   api_token: string;
