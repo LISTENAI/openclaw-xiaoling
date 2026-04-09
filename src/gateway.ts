@@ -10,6 +10,9 @@ import type { XiaolingAccount } from '@/types';
 type GatewayAdapter = NonNullable<ChannelPlugin<XiaolingAccount>['gateway']>;
 type GatewayContext = Parameters<NonNullable<GatewayAdapter['startAccount']>>[0];
 
+// Per-account abort controllers to prevent duplicate connection loops
+const accountAbortControllers = new Map<string, AbortController>();
+
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) {
@@ -24,22 +27,51 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
-function connectAndListen(ctx: GatewayContext): void {
-  const { account, accountId, abortSignal, log } = ctx;
+function connectAndListen(ctx: GatewayContext): Promise<void> {
+  const { account, accountId, log } = ctx;
+
+  // Abort any previous connection loop for this account
+  accountAbortControllers.get(accountId)?.abort();
+  const localAbort = new AbortController();
+  accountAbortControllers.set(accountId, localAbort);
+
+  // Abort when either the ctx signal or our local signal fires
+  const abortSignal = localAbort.signal;
+  ctx.abortSignal.addEventListener('abort', () => localAbort.abort(), { once: true });
 
   if (!account.apiToken) {
     log?.error?.('No apiToken configured, cannot connect');
-    return;
+    return Promise.resolve();
   }
 
   const url = getWsUrl(account.apiToken);
   let reconnectAttempt = 0;
+
+  // Never resolve until aborted — framework expects startAccount to
+  // block for the lifetime of the connection.
+  const lifetimePromise = new Promise<void>((resolve) => {
+    abortSignal.addEventListener('abort', () => resolve(), { once: true });
+  });
 
   function connect() {
     if (abortSignal.aborted) return;
 
     log?.info?.(`Connecting to LSPlatform: ${url}`);
     const ws = new WebSocket(url);
+
+    let pingInterval: ReturnType<typeof setInterval> | undefined;
+
+    function sendPing() {
+      if (ws.readyState !== WebSocket.OPEN) return;
+      const frame = {
+        type: 'ping',
+        headers: { request_id: `ping-${Date.now()}` },
+        payload: { ts: Math.floor(Date.now() / 1000) },
+      };
+      const data = JSON.stringify(frame);
+      log?.info?.(`WS send: ${data}`);
+      ws.send(data);
+    }
 
     ws.on('open', () => {
       log?.info?.('Connected to LSPlatform');
@@ -51,26 +83,45 @@ function connectAndListen(ctx: GatewayContext): void {
         running: true,
         lastConnectedAt: Date.now(),
       });
+
+      // Send initial ping immediately, then every 30s
+      sendPing();
+      pingInterval = setInterval(sendPing, 30_000);
+
+
     });
 
     ws.on('message', (raw) => {
-      let msg: WsInbound;
+      const text = String(raw);
+      log?.info?.(`WS recv: ${text.slice(0, 200)}`);
+
+      let msg: { type: string; headers?: { request_id?: string }; payload?: Record<string, unknown> };
       try {
-        msg = JSON.parse(String(raw)) as WsInbound;
+        msg = JSON.parse(text);
       } catch {
         log?.warn?.('Received invalid JSON from LSPlatform');
         return;
       }
 
-      if (msg.type === 'message') {
-        handleInboundMessage(ctx, ws, msg);
+      if (msg.type === 'ping') {
+        // Reply with ack per protocol
+        const ack = {
+          type: 'ack',
+          headers: { request_id: msg.headers?.request_id ?? '' },
+          payload: { code: 0, message: 'ok', ...(msg.payload?.ts != null ? { ts: msg.payload.ts } : {}) },
+        };
+        ws.send(JSON.stringify(ack));
+      } else if (msg.type === 'message') {
+        handleInboundMessage(ctx, ws, msg as WsInbound & { type: 'message' });
       } else if (msg.type === 'tool_result') {
-        handleToolResult(accountId, msg.requestId, msg.data);
+        const tr = msg as WsInbound & { type: 'tool_result' };
+        handleToolResult(accountId, tr.requestId, tr.data);
       }
     });
 
-    ws.on('close', () => {
-      log?.info?.('Disconnected from LSPlatform');
+    ws.on('close', (code, reason) => {
+      clearInterval(pingInterval);
+      log?.info?.(`Disconnected from LSPlatform (code: ${code}, reason: ${reason})`);
       unregisterConnection(accountId);
       ctx.setStatus({
         accountId,
@@ -109,6 +160,7 @@ function connectAndListen(ctx: GatewayContext): void {
   }
 
   connect();
+  return lifetimePromise;
 }
 
 function handleInboundMessage(
@@ -165,10 +217,14 @@ function handleInboundMessage(
 
 export const gatewayAdapter: GatewayAdapter = {
   async startAccount(ctx) {
-    connectAndListen(ctx);
+    ctx.log?.info?.(`Starting gateway for account "${ctx.accountId}" (device: ${ctx.account.deviceId})`);
+    await connectAndListen(ctx);
   },
 
   async stopAccount(ctx) {
+    ctx.log?.info?.(`Stopping gateway for account "${ctx.accountId}" (device: ${ctx.account.deviceId})`);
+    accountAbortControllers.get(ctx.accountId)?.abort();
+    accountAbortControllers.delete(ctx.accountId);
     unregisterConnection(ctx.accountId);
   },
 };
