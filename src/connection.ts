@@ -42,6 +42,13 @@ export function getConnection(accountId: string): WebSocket | undefined {
   return connections.get(accountId)?.ws;
 }
 
+export function getAnyActiveAccountId(): string | undefined {
+  for (const [accountId, entry] of connections) {
+    if (entry.ws.readyState === 1 /* WebSocket.OPEN */) return accountId;
+  }
+  return undefined;
+}
+
 export function sendMcpRequest(
   accountId: string,
   name: string,

@@ -5,6 +5,11 @@
   "channels": [
     "openclaw-xiaoling"
   ],
+  "contracts": {
+    "tools": [
+      "xiaoling_take_photo"
+    ]
+  },
   "configSchema": {
     "type": "object",
     "properties": {}

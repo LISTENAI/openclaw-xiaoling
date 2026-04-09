@@ -9,6 +9,6 @@ export default defineChannelPluginEntry({
   description: 'OpenClaw × 小聆 AI 插件',
   plugin: channelPlugin,
   registerFull(api) {
-    api.registerTool(toolFactory);
+    api.registerTool(toolFactory, { name: 'xiaoling_take_photo' });
   },
 });
