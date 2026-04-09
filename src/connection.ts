@@ -1,6 +1,7 @@
 import type WebSocket from 'ws';
 
-import type { McpOutboundFrame } from '@/api';
+import type { McpToolCallFrame, OutboundFrame } from '@/api';
+import type { GatewayContext } from '@/types';
 
 interface PendingRequest {
   resolve: (data: unknown) => void;
@@ -10,6 +11,7 @@ interface PendingRequest {
 
 interface ConnectionEntry {
   ws: WebSocket;
+  ctx: GatewayContext;
   pending: Map<string, PendingRequest>;
 }
 
@@ -17,7 +19,7 @@ const connections = new Map<string, ConnectionEntry>();
 
 let requestCounter = 0;
 
-export function registerConnection(accountId: string, ws: WebSocket): void {
+export function registerConnection(accountId: string, ws: WebSocket, ctx: GatewayContext): void {
   const existing = connections.get(accountId);
   if (existing) {
     for (const [, req] of existing.pending) {
@@ -25,7 +27,7 @@ export function registerConnection(accountId: string, ws: WebSocket): void {
       req.reject(new Error('Connection replaced'));
     }
   }
-  connections.set(accountId, { ws, pending: new Map() });
+  connections.set(accountId, { ws, ctx, pending: new Map() });
 }
 
 export function unregisterConnection(accountId: string): void {
@@ -38,10 +40,6 @@ export function unregisterConnection(accountId: string): void {
   connections.delete(accountId);
 }
 
-export function getConnection(accountId: string): WebSocket | undefined {
-  return connections.get(accountId)?.ws;
-}
-
 export function getAnyActiveAccountId(): string | undefined {
   for (const [accountId, entry] of connections) {
     if (entry.ws.readyState === 1 /* WebSocket.OPEN */) return accountId;
@@ -49,9 +47,20 @@ export function getAnyActiveAccountId(): string | undefined {
   return undefined;
 }
 
+export function sendFrame(accountId: string, frame: OutboundFrame): void {
+  const entry = connections.get(accountId);
+  if (!entry) throw new Error('No active connection for this account');
+  if (entry.ws.readyState !== 1 /* WebSocket.OPEN */) {
+    entry.ctx.log?.warn('WebSocket not open, cannot send frame');
+    return;
+  }
+  const data = JSON.stringify(frame);
+  entry.ctx.log?.info(`WS TX >> ${data}`);
+  entry.ws.send(data);
+}
+
 export function sendMcpRequest(
   accountId: string,
-  name: string,
   args: Record<string, unknown>,
   timeoutMs = 30_000,
 ): Promise<unknown> {
@@ -62,20 +71,18 @@ export function sendMcpRequest(
 
   const requestId = `mcp-${++requestCounter}-${Date.now()}`;
 
-  const frame: McpOutboundFrame = {
-    type: 'mcp',
-    headers: { request_id: requestId },
-    payload: { name, arguments: args },
-  };
-
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       entry.pending.delete(requestId);
-      reject(new Error(`MCP request timed out: ${name}`));
+      reject(new Error('MCP request timed out: tool.call'));
     }, timeoutMs);
 
     entry.pending.set(requestId, { resolve, reject, timer });
-    entry.ws.send(JSON.stringify(frame));
+    sendFrame(accountId, {
+      type: 'mcp',
+      headers: { request_id: requestId },
+      payload: { name: 'tool.call', arguments: args },
+    } satisfies McpToolCallFrame);
   });
 }
 

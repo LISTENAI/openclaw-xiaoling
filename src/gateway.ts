@@ -1,14 +1,20 @@
 import WebSocket from 'ws';
 import type { ChannelPlugin } from 'openclaw/plugin-sdk/core';
 
-import { getWsUrl } from '@/api';
-import type { InboundFrame, MessageFrame, ReplyStreamFrame } from '@/api';
+import {
+  getWsUrl,
+  type InboundFrame,
+  type MessageFrame,
+  type MixedMessageFrame,
+  type PingFrame,
+  type ReplyFrame,
+  type TextMessageFrame,
+} from '@/api';
 import { CHANNEL_ID } from '@/constants';
-import { registerConnection, unregisterConnection, handleMcpResult, handleRequestError } from '@/connection';
-import type { XiaolingAccount } from '@/types';
+import { registerConnection, unregisterConnection, sendFrame, handleMcpResult, handleRequestError } from '@/connection';
+import type { GatewayContext, XiaolingAccount } from '@/types';
 
 type GatewayAdapter = NonNullable<ChannelPlugin<XiaolingAccount>['gateway']>;
-type GatewayContext = Parameters<NonNullable<GatewayAdapter['startAccount']>>[0];
 
 // Per-account abort controllers to prevent duplicate connection loops
 const accountAbortControllers = new Map<string, AbortController>();
@@ -62,21 +68,17 @@ function connectAndListen(ctx: GatewayContext): Promise<void> {
     let pingInterval: ReturnType<typeof setInterval> | undefined;
 
     function sendPing() {
-      if (ws.readyState !== WebSocket.OPEN) return;
-      const frame = {
+      sendFrame(accountId, {
         type: 'ping',
         headers: { request_id: `ping-${Date.now()}` },
         payload: { ts: Math.floor(Date.now() / 1000) },
-      };
-      const data = JSON.stringify(frame);
-      log?.info?.(`WS send: ${data}`);
-      ws.send(data);
+      } satisfies PingFrame);
     }
 
     ws.on('open', () => {
       log?.info?.('Connected to LSPlatform');
       reconnectAttempt = 0;
-      registerConnection(accountId, ws);
+      registerConnection(accountId, ws, ctx);
       ctx.setStatus({
         accountId,
         connected: true,
@@ -92,9 +94,9 @@ function connectAndListen(ctx: GatewayContext): Promise<void> {
 
     ws.on('message', (raw) => {
       const text = String(raw);
-      log?.info?.(`WS recv: ${text.slice(0, 200)}`);
+      log?.info?.(`WS RX << ${text.slice(0, 200)}`);
 
-      let msg: { type: string; headers?: { request_id?: string }; payload?: Record<string, unknown> };
+      let msg: InboundFrame;
       try {
         msg = JSON.parse(text);
       } catch {
@@ -102,27 +104,18 @@ function connectAndListen(ctx: GatewayContext): Promise<void> {
         return;
       }
 
-      const frame = msg as unknown as InboundFrame;
-
-      if (frame.type === 'ping') {
-        const pong = {
-          type: 'pong',
-          headers: { request_id: frame.headers?.request_id ?? '' },
-          payload: { code: 0, message: 'ok', ...(frame.payload?.ts != null ? { ts: frame.payload.ts } : {}) },
-        };
-        ws.send(JSON.stringify(pong));
-      } else if (frame.type === 'message') {
+      if (msg.type === 'ack') {
+        // no-op
+      } else if (msg.type === 'message') {
         ctx.setStatus({ accountId, lastInboundAt: Date.now() });
-        handleInboundMessage(ctx, ws, frame);
-      } else if (frame.type === 'mcp') {
-        if (frame.payload.name === 'tool.result') {
-          handleMcpResult(accountId, frame.headers.request_id, frame.payload.result);
-        }
-      } else if (frame.type === 'error') {
-        log?.error?.(`Server error: ${frame.payload.code} ${frame.payload.message}`);
-        ctx.setStatus({ accountId, lastError: `${frame.payload.code}: ${frame.payload.message}` });
-        if (frame.headers.request_id) {
-          handleRequestError(accountId, frame.headers.request_id, frame.payload.code, frame.payload.message);
+        handleInboundMessage(ctx, msg as MessageFrame<string, unknown>);
+      } else if (msg.type === 'mcp') {
+        handleMcpResult(accountId, msg.headers.request_id, msg.payload.result);
+      } else if (msg.type === 'error') {
+        log?.error?.(`Server error: ${msg.payload.code} ${msg.payload.message}`);
+        ctx.setStatus({ accountId, lastError: `${msg.payload.code}: ${msg.payload.message}` });
+        if (msg.headers.request_id) {
+          handleRequestError(accountId, msg.headers.request_id, msg.payload.code, msg.payload.message);
         }
       }
     });
@@ -171,23 +164,21 @@ function connectAndListen(ctx: GatewayContext): Promise<void> {
   return lifetimePromise;
 }
 
-function extractBody(frame: MessageFrame): string {
-  const { payload } = frame;
-  if (payload.message_type === 'text') {
-    return payload.text.content;
-  } else if (payload.message_type === 'mixed') {
-    return payload.mixed.items
+function extractBody(frame: MessageFrame<string, unknown>): string {
+  if (frame.payload.message_type === 'text') {
+    return (frame as TextMessageFrame).payload.text.content;
+  } else if (frame.payload.message_type === 'mixed') {
+    return (frame as MixedMessageFrame).payload.mixed.items
       .filter((i) => i.message_type === 'text')
       .map((i) => i.text?.content ?? '')
-      .join('\n');
+      .join('\n\n');
   }
   return '';
 }
 
 function handleInboundMessage(
   ctx: GatewayContext,
-  ws: WebSocket,
-  frame: MessageFrame,
+  frame: MessageFrame<string, unknown>,
 ): void {
   const { cfg, accountId, log } = ctx;
   const runtime = ctx.channelRuntime;
@@ -227,28 +218,26 @@ function handleInboundMessage(
       deliver: async (deliverPayload) => {
         const text = deliverPayload.text ?? '';
         if (!text) return;
-        const replyFrame: ReplyStreamFrame = {
+        sendFrame(accountId, {
           type: 'reply',
           headers: { request_id: requestId },
           payload: {
             reply_type: 'stream',
             stream: { stream_id: streamId, finished: false, content: text },
           },
-        };
-        ws.send(JSON.stringify(replyFrame));
+        } satisfies ReplyFrame);
       },
     },
   }).then(() => {
     // Send finished frame
-    const finalFrame: ReplyStreamFrame = {
+    sendFrame(accountId, {
       type: 'reply',
       headers: { request_id: requestId },
       payload: {
         reply_type: 'stream',
         stream: { stream_id: streamId, finished: true, content: '' },
       },
-    };
-    ws.send(JSON.stringify(finalFrame));
+    } satisfies ReplyFrame);
     ctx.setStatus({ accountId, lastOutboundAt: Date.now() });
   }).catch((err) => {
     log?.error?.(`Failed to dispatch reply: ${err}`);

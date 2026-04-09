@@ -1,3 +1,5 @@
+import type { ChannelPlugin } from 'openclaw/plugin-sdk/core';
+
 export interface XiaolingAccount {
   accountId?: string | null;
   apiToken?: string | null;
@@ -11,3 +13,6 @@ export interface XiaolingChannelConfig {
   defaultAccount?: string;
   accounts?: Record<string, XiaolingAccount>;
 }
+
+type GatewayAdapter = NonNullable<ChannelPlugin<XiaolingAccount>['gateway']>;
+export type GatewayContext = Parameters<NonNullable<GatewayAdapter['startAccount']>>[0];
