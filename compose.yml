@@ -1,6 +1,6 @@
 services:
   openclaw:
-    image: ghcr.io/openclaw/openclaw:2026.4.1-slim
+    image: ghcr.io/openclaw/openclaw:2026.4.8-slim
     restart: unless-stopped
     ports:
       - '18789:18789'
