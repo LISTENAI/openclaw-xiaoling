@@ -1,6 +1,6 @@
 import type WebSocket from 'ws';
 
-import type { WsOutbound } from '@/api';
+import type { McpOutboundFrame } from '@/api';
 
 interface PendingRequest {
   resolve: (data: unknown) => void;
@@ -42,10 +42,10 @@ export function getConnection(accountId: string): WebSocket | undefined {
   return connections.get(accountId)?.ws;
 }
 
-export function sendToolRequest(
+export function sendMcpRequest(
   accountId: string,
-  tool: string,
-  params: Record<string, unknown>,
+  name: string,
+  args: Record<string, unknown>,
   timeoutMs = 30_000,
 ): Promise<unknown> {
   const entry = connections.get(accountId);
@@ -53,27 +53,26 @@ export function sendToolRequest(
     return Promise.reject(new Error('No active connection for this account'));
   }
 
-  const requestId = `req-${++requestCounter}-${Date.now()}`;
+  const requestId = `mcp-${++requestCounter}-${Date.now()}`;
 
-  const message: WsOutbound = {
-    type: 'tool_request',
-    requestId,
-    tool,
-    params,
+  const frame: McpOutboundFrame = {
+    type: 'mcp',
+    headers: { request_id: requestId },
+    payload: { name, arguments: args },
   };
 
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       entry.pending.delete(requestId);
-      reject(new Error(`Tool request timed out: ${tool}`));
+      reject(new Error(`MCP request timed out: ${name}`));
     }, timeoutMs);
 
     entry.pending.set(requestId, { resolve, reject, timer });
-    entry.ws.send(JSON.stringify(message));
+    entry.ws.send(JSON.stringify(frame));
   });
 }
 
-export function handleToolResult(accountId: string, requestId: string, data: unknown): void {
+export function handleMcpResult(accountId: string, requestId: string, data: unknown): void {
   const entry = connections.get(accountId);
   if (!entry) return;
 

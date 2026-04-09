@@ -1,7 +1,7 @@
 import { Type } from '@sinclair/typebox';
 import type { OpenClawPluginToolFactory } from 'openclaw/plugin-sdk/core';
 
-import { sendToolRequest } from '@/connection';
+import { sendMcpRequest } from '@/connection';
 
 export const toolFactory: OpenClawPluginToolFactory = (ctx) => {
   const accountId = ctx.agentAccountId;
@@ -18,7 +18,7 @@ export const toolFactory: OpenClawPluginToolFactory = (ctx) => {
         ),
       }),
       async execute(_toolCallId, params) {
-        const result = await sendToolRequest(accountId, 'take_photo', params);
+        const result = await sendMcpRequest(accountId, 'tool.call', { tool: 'camera.describe', ...params });
         return {
           content: [{ type: 'text' as const, text: JSON.stringify(result) }],
           details: result,
