@@ -105,12 +105,12 @@ function connectAndListen(ctx: GatewayContext): Promise<void> {
       const frame = msg as unknown as InboundFrame;
 
       if (frame.type === 'ping') {
-        const ack = {
-          type: 'ack',
+        const pong = {
+          type: 'pong',
           headers: { request_id: frame.headers?.request_id ?? '' },
           payload: { code: 0, message: 'ok', ...(frame.payload?.ts != null ? { ts: frame.payload.ts } : {}) },
         };
-        ws.send(JSON.stringify(ack));
+        ws.send(JSON.stringify(pong));
       } else if (frame.type === 'message') {
         ctx.setStatus({ accountId, lastInboundAt: Date.now() });
         handleInboundMessage(ctx, ws, frame);
