@@ -123,6 +123,7 @@ function connectAndListen(ctx: GatewayContext): Promise<void> {
     ws.on('close', (code, reason) => {
       clearInterval(pingInterval);
       log?.info?.(`Disconnected from LSPlatform (code: ${code}, reason: ${reason})`);
+      if (abortSignal.aborted) return;
       unregisterConnection(accountId);
       ctx.setStatus({
         accountId,
