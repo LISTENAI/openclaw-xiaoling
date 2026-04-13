@@ -43,7 +43,6 @@ export type AckFrame = WsFrame<'ack', {
 export type MessageFrame<T extends string, P> = WsFrame<'message', {
   message_id: string;
   conversation_id: string;
-  session_id: string;
   sender: { id: string };
   timestamp: number;
   message_type: T;
@@ -85,14 +84,15 @@ export type MixedMessageFrame = MessageFrame<'mixed', {
 
 export type EventFrame = WsFrame<'event', {
   event_id: string;
-  conversation_id: string;
-  session_id: string;
+  conversation_id?: string;
+  session_id?: string;
   timestamp: number;
   event_type: string;
   actor: { id: string };
 }>;
 
 export type ReplyFrame = WsFrame<'reply', {
+  message_id: string;
   reply_type: 'stream';
   stream: {
     stream_id: string;
@@ -105,6 +105,12 @@ export type ReplyFrame = WsFrame<'reply', {
         md5: string;
       };
     }[];
+  };
+} | {
+  message_id: string;
+  reply_type: 'image';
+  image: {
+    media_id: string;
   };
 }>;
 

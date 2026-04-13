@@ -11,7 +11,7 @@ import {
   type TextMessageFrame,
 } from '@/api';
 import { CHANNEL_ID } from '@/constants';
-import { registerConnection, unregisterConnection, sendFrame, handleMcpResult, handleRequestError } from '@/connection';
+import { registerConnection, unregisterConnection, sendFrame, setLastMessageId, getLastMessageId, handleMcpResult, handleRequestError } from '@/connection';
 import type { GatewayContext, XiaolingAccount } from '@/types';
 
 type GatewayAdapter = NonNullable<ChannelPlugin<XiaolingAccount>['gateway']>;
@@ -94,7 +94,7 @@ function connectAndListen(ctx: GatewayContext): Promise<void> {
 
     ws.on('message', (raw) => {
       const text = String(raw);
-      log?.info?.(`WS RX << ${text.slice(0, 200)}`);
+      log?.info?.(`WS RX << ${text}`);
 
       let msg: InboundFrame;
       try {
@@ -107,8 +107,10 @@ function connectAndListen(ctx: GatewayContext): Promise<void> {
       if (msg.type === 'ack') {
         // no-op
       } else if (msg.type === 'message') {
+        const messageFrame = msg as MessageFrame<string, unknown>;
+        setLastMessageId(accountId, messageFrame.payload.message_id);
         ctx.setStatus({ accountId, lastInboundAt: Date.now() });
-        handleInboundMessage(ctx, msg as MessageFrame<string, unknown>);
+        handleInboundMessage(ctx, messageFrame);
       } else if (msg.type === 'mcp') {
         handleMcpResult(accountId, msg.headers.request_id, msg.payload.result);
       } else if (msg.type === 'error') {
@@ -190,8 +192,8 @@ function handleInboundMessage(
   }
 
   const { payload } = frame;
-  const requestId = frame.headers.request_id;
-  const streamId = `stream-${requestId}`;
+  const replyRequestId = `reply-${payload.message_id}-${Date.now()}`;
+  const streamId = `stream-${Date.now()}`;
 
   const route = runtime.routing.resolveAgentRoute({
     cfg,
@@ -221,8 +223,9 @@ function handleInboundMessage(
         if (!text) return;
         sendFrame(accountId, {
           type: 'reply',
-          headers: { request_id: requestId },
+          headers: { request_id: replyRequestId },
           payload: {
+            message_id: getLastMessageId(accountId) ?? payload.message_id,
             reply_type: 'stream',
             stream: { stream_id: streamId, finished: false, content: text },
           },
@@ -233,8 +236,9 @@ function handleInboundMessage(
     // Send finished frame
     sendFrame(accountId, {
       type: 'reply',
-      headers: { request_id: requestId },
+      headers: { request_id: replyRequestId },
       payload: {
+        message_id: getLastMessageId(accountId) ?? payload.message_id,
         reply_type: 'stream',
         stream: { stream_id: streamId, finished: true, content: '' },
       },

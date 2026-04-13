@@ -13,6 +13,7 @@ interface ConnectionEntry {
   ws: WebSocket;
   ctx: GatewayContext;
   pending: Map<string, PendingRequest>;
+  lastMessageId: string | null;
 }
 
 const connections = new Map<string, ConnectionEntry>();
@@ -27,7 +28,7 @@ export function registerConnection(accountId: string, ws: WebSocket, ctx: Gatewa
       req.reject(new Error('Connection replaced'));
     }
   }
-  connections.set(accountId, { ws, ctx, pending: new Map() });
+  connections.set(accountId, { ws, ctx, pending: new Map(), lastMessageId: null });
 }
 
 export function unregisterConnection(accountId: string): void {
@@ -45,6 +46,15 @@ export function getAnyActiveAccountId(): string | undefined {
     if (entry.ws.readyState === 1 /* WebSocket.OPEN */) return accountId;
   }
   return undefined;
+}
+
+export function setLastMessageId(accountId: string, messageId: string): void {
+  const entry = connections.get(accountId);
+  if (entry) entry.lastMessageId = messageId;
+}
+
+export function getLastMessageId(accountId: string): string | null {
+  return connections.get(accountId)?.lastMessageId ?? null;
 }
 
 export function sendFrame(accountId: string, frame: OutboundFrame): void {
