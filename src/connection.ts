@@ -1,10 +1,17 @@
 import type WebSocket from 'ws';
 
 import type { McpToolCallFrame, OutboundFrame } from '@/api';
+import {
+  assertAllowedDeviceToolName,
+  normalizeMcpToolResponse,
+  XiaolingToolCallError,
+  type AllowedDeviceToolName,
+  type NormalizedMcpResult,
+} from '@/mcp';
 import type { GatewayContext } from '@/types';
 
 interface PendingRequest {
-  resolve: (data: unknown) => void;
+  resolve: (data: NormalizedMcpResult) => void;
   reject: (error: Error) => void;
   timer: ReturnType<typeof setTimeout>;
 }
@@ -69,14 +76,30 @@ export function sendFrame(accountId: string, frame: OutboundFrame): void {
   entry.ws.send(data);
 }
 
-export function sendMcpRequest(
+function sendFrameOrThrow(entry: ConnectionEntry, frame: OutboundFrame): void {
+  if (entry.ws.readyState !== 1 /* WebSocket.OPEN */) {
+    throw new XiaolingToolCallError('WS_NOT_OPEN', 'WebSocket is not open');
+  }
+
+  const data = JSON.stringify(frame);
+  entry.ctx.log?.info(`WS TX >> ${data}`);
+  entry.ws.send(data);
+}
+
+export function sendMcpToolCall(
   accountId: string,
+  toolName: AllowedDeviceToolName,
   args: Record<string, unknown>,
   timeoutMs = 30_000,
-): Promise<unknown> {
+): Promise<NormalizedMcpResult> {
+  assertAllowedDeviceToolName(toolName);
+
   const entry = connections.get(accountId);
   if (!entry) {
-    return Promise.reject(new Error('No active connection for this account'));
+    return Promise.reject(new XiaolingToolCallError('NO_ACTIVE_CONNECTION', 'No active xiaoling device connection'));
+  }
+  if (entry.ws.readyState !== 1 /* WebSocket.OPEN */) {
+    return Promise.reject(new XiaolingToolCallError('WS_NOT_OPEN', 'WebSocket is not open'));
   }
 
   const requestId = `mcp-${++requestCounter}-${Date.now()}`;
@@ -84,19 +107,33 @@ export function sendMcpRequest(
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       entry.pending.delete(requestId);
-      reject(new Error('MCP request timed out: tool.call'));
+      reject(new XiaolingToolCallError('MCP_TIMEOUT', `MCP request timed out: ${toolName}`, { requestId, toolName }));
     }, timeoutMs);
 
     entry.pending.set(requestId, { resolve, reject, timer });
-    sendFrame(accountId, {
-      type: 'mcp',
-      headers: { request_id: requestId },
-      payload: { name: 'tool.call', arguments: args },
-    } satisfies McpToolCallFrame);
+    try {
+      sendFrameOrThrow(entry, {
+        type: 'mcp',
+        headers: { request_id: requestId },
+        payload: {
+          jsonrpc: '2.0',
+          id: requestId,
+          method: 'tools/call',
+          params: {
+            name: toolName,
+            arguments: args,
+          },
+        },
+      } satisfies McpToolCallFrame);
+    } catch (error) {
+      clearTimeout(timer);
+      entry.pending.delete(requestId);
+      reject(error instanceof Error ? error : new Error(String(error)));
+    }
   });
 }
 
-export function handleMcpResult(accountId: string, requestId: string, data: unknown): void {
+export function handleMcpResponse(accountId: string, requestId: string, payload: unknown): void {
   const entry = connections.get(accountId);
   if (!entry) return;
 
@@ -105,7 +142,12 @@ export function handleMcpResult(accountId: string, requestId: string, data: unkn
 
   clearTimeout(pending.timer);
   entry.pending.delete(requestId);
-  pending.resolve(data);
+
+  try {
+    pending.resolve(normalizeMcpToolResponse(payload));
+  } catch (error) {
+    pending.reject(error instanceof Error ? error : new Error(String(error)));
+  }
 }
 
 export function handleRequestError(accountId: string, requestId: string, code: string, message: string): void {
@@ -117,5 +159,5 @@ export function handleRequestError(accountId: string, requestId: string, code: s
 
   clearTimeout(pending.timer);
   entry.pending.delete(requestId);
-  pending.reject(new Error(`${code}: ${message}`));
+  pending.reject(new XiaolingToolCallError('MCP_SERVER_ERROR', `${code}: ${message}`, { code, message }));
 }

@@ -11,7 +11,7 @@ import {
   type TextMessageFrame,
 } from '@/api';
 import { CHANNEL_ID } from '@/constants';
-import { registerConnection, unregisterConnection, sendFrame, setLastMessageId, getLastMessageId, handleMcpResult, handleRequestError } from '@/connection';
+import { registerConnection, unregisterConnection, sendFrame, setLastMessageId, handleMcpResponse, handleRequestError } from '@/connection';
 import type { GatewayContext, XiaolingAccount } from '@/types';
 
 type GatewayAdapter = NonNullable<ChannelPlugin<XiaolingAccount>['gateway']>;
@@ -31,6 +31,10 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
       reject(signal.reason);
     }, { once: true });
   });
+}
+
+function redactWsUrl(url: string): string {
+  return url.replace(/([?&]api_token=)[^&]+/i, '$1<redacted>');
 }
 
 function connectAndListen(ctx: GatewayContext): Promise<void> {
@@ -62,7 +66,7 @@ function connectAndListen(ctx: GatewayContext): Promise<void> {
   function connect() {
     if (abortSignal.aborted) return;
 
-    log?.info?.(`Connecting to LSPlatform: ${url}`);
+    log?.info?.(`Connecting to LSPlatform: ${redactWsUrl(url)}`);
     const ws = new WebSocket(url);
 
     let pingInterval: ReturnType<typeof setInterval> | undefined;
@@ -112,7 +116,7 @@ function connectAndListen(ctx: GatewayContext): Promise<void> {
         ctx.setStatus({ accountId, lastInboundAt: Date.now() });
         handleInboundMessage(ctx, messageFrame);
       } else if (msg.type === 'mcp') {
-        handleMcpResult(accountId, msg.headers.request_id, msg.payload.result);
+        handleMcpResponse(accountId, msg.headers.request_id, msg.payload);
       } else if (msg.type === 'error') {
         log?.error?.(`Server error: ${msg.payload.code} ${msg.payload.message}`);
         ctx.setStatus({ accountId, lastError: `${msg.payload.code}: ${msg.payload.message}` });
@@ -225,7 +229,7 @@ function handleInboundMessage(
           type: 'reply',
           headers: { request_id: replyRequestId },
           payload: {
-            message_id: getLastMessageId(accountId) ?? payload.message_id,
+            message_id: payload.message_id,
             reply_type: 'stream',
             stream: { stream_id: streamId, finished: false, content: text },
           },
@@ -238,7 +242,7 @@ function handleInboundMessage(
       type: 'reply',
       headers: { request_id: replyRequestId },
       payload: {
-        message_id: getLastMessageId(accountId) ?? payload.message_id,
+        message_id: payload.message_id,
         reply_type: 'stream',
         stream: { stream_id: streamId, finished: true, content: '' },
       },

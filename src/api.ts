@@ -114,15 +114,39 @@ export type ReplyFrame = WsFrame<'reply', {
   };
 }>;
 
-export type McpToolCallFrame = WsFrame<'mcp', {
-  name: 'tool.call';
-  arguments: Record<string, unknown>;
-}>;
+export type McpJsonRpcId = string | number;
 
-export type McpToolResultFrame = WsFrame<'mcp', {
+export interface McpJsonRpcError {
+  code?: string | number;
+  message: string;
+  data?: unknown;
+}
+
+export interface McpToolCallPayload {
+  jsonrpc: '2.0';
+  id: string;
+  method: 'tools/call';
+  params: {
+    name: string;
+    arguments: Record<string, unknown>;
+  };
+}
+
+export interface McpJsonRpcResponsePayload {
+  jsonrpc?: '2.0';
+  id?: McpJsonRpcId;
+  result?: unknown;
+  error?: McpJsonRpcError;
+}
+
+export interface LegacyMcpToolResultPayload {
   name: 'tool.result';
   result: unknown;
-}>;
+}
+
+export type McpToolCallFrame = WsFrame<'mcp', McpToolCallPayload>;
+
+export type McpToolResultFrame = WsFrame<'mcp', McpJsonRpcResponsePayload | LegacyMcpToolResultPayload>;
 
 export type ErrorFrame = WsFrame<'error', {
   code: string;
