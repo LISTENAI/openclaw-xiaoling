@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import WebSocket from 'ws';
 import type { ChannelPlugin } from 'openclaw/plugin-sdk/core';
 
@@ -15,6 +17,7 @@ import { registerConnection, unregisterConnection, sendFrame, setLastMessageId, 
 import type { GatewayContext, XiaolingAccount } from '@/types';
 
 type GatewayAdapter = NonNullable<ChannelPlugin<XiaolingAccount>['gateway']>;
+type ReplyImageItem = NonNullable<Extract<ReplyFrame['payload'], { reply_type: 'stream' }>['stream']['items']>[number];
 
 // Per-account abort controllers to prevent duplicate connection loops
 const accountAbortControllers = new Map<string, AbortController>();
@@ -183,6 +186,38 @@ function extractBody(frame: MessageFrame<string, unknown>): string {
   return '';
 }
 
+function collectMediaUrls(payload: { mediaUrl?: string; mediaUrls?: string[] }): string[] {
+  const urls = [
+    ...(Array.isArray(payload.mediaUrls) ? payload.mediaUrls : []),
+    ...(payload.mediaUrl ? [payload.mediaUrl] : []),
+  ]
+    .map((url) => url.trim())
+    .filter(Boolean);
+
+  return [...new Set(urls)];
+}
+
+async function buildReplyImageItem(mediaUrl: string): Promise<ReplyImageItem> {
+  const response = await fetch(mediaUrl);
+  if (!response.ok) {
+    throw new Error(`failed to fetch reply image: HTTP ${response.status}`);
+  }
+
+  const contentType = response.headers.get('content-type')?.split(';')[0]?.trim() ?? '';
+  if (!contentType.startsWith('image/')) {
+    throw new Error(`reply media is not an image: ${contentType || 'unknown content-type'}`);
+  }
+
+  const buffer = Buffer.from(await response.arrayBuffer());
+  return {
+    message_type: 'image',
+    image: {
+      base64: buffer.toString('base64'),
+      md5: createHash('md5').update(buffer).digest('hex'),
+    },
+  };
+}
+
 function handleInboundMessage(
   ctx: GatewayContext,
   frame: MessageFrame<string, unknown>,
@@ -224,14 +259,30 @@ function handleInboundMessage(
     dispatcherOptions: {
       deliver: async (deliverPayload) => {
         const text = deliverPayload.text ?? '';
-        if (!text) return;
+        const mediaUrls = collectMediaUrls(deliverPayload);
+        const items: ReplyImageItem[] = [];
+
+        for (const mediaUrl of mediaUrls) {
+          try {
+            items.push(await buildReplyImageItem(mediaUrl));
+          } catch (error) {
+            log?.warn?.(`Failed to attach reply image ${mediaUrl}: ${error instanceof Error ? error.message : String(error)}`);
+          }
+        }
+
+        if (!text && items.length === 0) return;
         sendFrame(accountId, {
           type: 'reply',
           headers: { request_id: replyRequestId },
           payload: {
             message_id: payload.message_id,
             reply_type: 'stream',
-            stream: { stream_id: streamId, finished: false, content: text },
+            stream: {
+              stream_id: streamId,
+              finished: false,
+              content: text,
+              ...(items.length > 0 ? { items } : {}),
+            },
           },
         } satisfies ReplyFrame);
       },
