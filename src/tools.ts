@@ -219,7 +219,7 @@ function finalizeBuiltToolContent(content: ToolContent[], mediaUrls: string[]): 
   const hasImage = content.some((block) => block.type === 'image');
   const hasText = content.some((block) => block.type === 'text' && block.text.trim() !== '');
   if (hasImage && !hasText) {
-    content.unshift({ type: 'text', text: '拍照完成，图片如下。' });
+    content.unshift({ type: 'text', text: `拍照完成\n\nMEDIA:${mediaUrls?.[0]}` });
   }
 
   return { content, mediaUrls };
