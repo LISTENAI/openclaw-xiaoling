@@ -63,11 +63,11 @@ export async function executeXiaolingTakePhoto(
       raw: result.raw,
       ...(built.mediaUrls.length > 0
         ? {
-            media: {
-              mediaUrl: built.mediaUrls[0]!,
-              mediaUrls: built.mediaUrls,
-            },
-          }
+          media: {
+            mediaUrl: built.mediaUrls[0]!,
+            mediaUrls: built.mediaUrls,
+          },
+        }
         : {}),
     },
   };
@@ -219,7 +219,7 @@ function finalizeBuiltToolContent(content: ToolContent[], mediaUrls: string[]): 
   const hasImage = content.some((block) => block.type === 'image');
   const hasText = content.some((block) => block.type === 'text' && block.text.trim() !== '');
   if (hasImage && !hasText) {
-    content.unshift({ type: 'text', text: `拍照完成\n\nMEDIA:${mediaUrls?.[0]}` });
+    content.unshift({ type: 'text', text: `拍照完成，图片 URL 为: ${mediaUrls?.[0]}\n\n请使用 \`MEDIA:<url>\` 的形式把图片发回给用户。` });
   }
 
   return { content, mediaUrls };
