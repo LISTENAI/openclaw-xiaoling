@@ -11,9 +11,11 @@ const pkg = JSON.parse(
   version: string;
 };
 
+const staging = pkg.version?.includes('-alpha.') || pkg.version?.includes('-beta.');
+
 console.log('请依次执行下面的命令安装:');
 console.log('');
-console.log(`openclaw plugins install npm:${pkg.name}@${pkg.version?.includes('-beta.') ? 'beta' : 'latest'}`);
+console.log(`openclaw plugins install npm:${pkg.name}@${staging ? 'beta' : 'latest'}`);
 console.log('openclaw gateway restart');
 console.log('openclaw channels add');
 console.log('(按照提示添加「小聆 AI」)');
