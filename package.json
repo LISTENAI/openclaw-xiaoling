@@ -1,6 +1,6 @@
 {
   "name": "@listenai/openclaw-xiaoling",
-  "version": "0.1.0-alpha.5",
+  "version": "0.1.0-beta.1",
   "description": "OpenClaw × 小聆 AI 插件",
   "type": "module",
   "author": "LISTENAI",
