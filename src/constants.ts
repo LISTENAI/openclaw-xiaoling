@@ -12,9 +12,8 @@ const pkg = JSON.parse(
 
 export const CHANNEL_ID = 'openclaw-xiaoling';
 
-const PREFIX = process.env['XIAOLING_PREFIX']
-  ?? ((pkg.version?.includes('-alpha.') || pkg.version?.includes('-beta.'))
-    ? 'staging-' : '');
+const PREFIX = (pkg.version?.includes('-alpha.') || pkg.version?.includes('-beta.'))
+  ? 'staging-' : '';
 
 export const API_BASE = `https://${PREFIX}api.listenai.com`;
 export const WS_BASE = `wss://${PREFIX}api.listenai.com/v1/openclaw`;
