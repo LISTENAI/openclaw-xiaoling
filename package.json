@@ -28,6 +28,7 @@
     },
     "install": {
       "npmSpec": "@listenai/openclaw-xiaoling",
+      "localPath": "extensions/openclaw-xiaoling",
       "defaultChoice": "npm"
     }
   },
