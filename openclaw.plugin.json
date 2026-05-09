@@ -13,5 +13,12 @@
   "configSchema": {
     "type": "object",
     "properties": {}
+  },
+  "channelConfigs": {
+    "openclaw-xiaoling": {
+      "schema": {
+        "type": "object"
+      }
+    }
   }
 }
