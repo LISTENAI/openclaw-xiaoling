@@ -25,6 +25,10 @@
       "label": "小聆 AI",
       "selectionLabel": "小聆 AI",
       "blurb": "OpenClaw × 小聆 AI"
+    },
+    "install": {
+      "npmSpec": "@listenai/openclaw-xiaoling",
+      "defaultChoice": "npm"
     }
   },
   "dependencies": {

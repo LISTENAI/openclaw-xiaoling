@@ -18,7 +18,9 @@
     "openclaw-xiaoling": {
       "schema": {
         "type": "object"
-      }
+      },
+      "label": "小聆 AI",
+      "description": "OpenClaw × 小聆 AI 插件"
     }
   }
 }
