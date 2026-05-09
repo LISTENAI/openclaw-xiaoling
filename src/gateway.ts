@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 
 import WebSocket from 'ws';
 import type { ChannelPlugin } from 'openclaw/plugin-sdk/core';
+import { resolveAgentRoute } from 'openclaw/plugin-sdk/routing';
+import { dispatchReplyWithBufferedBlockDispatcher, finalizeInboundContext } from 'openclaw/plugin-sdk/reply-runtime';
 
 import {
   getWsUrl,
@@ -234,14 +236,14 @@ function handleInboundMessage(
   const replyRequestId = `reply-${payload.message_id}-${Date.now()}`;
   const streamId = `stream-${Date.now()}`;
 
-  const route = runtime.routing.resolveAgentRoute({
+  const route = resolveAgentRoute({
     cfg,
     channel: CHANNEL_ID,
     accountId,
     peer: { kind: 'direct', id: payload.sender.id },
   });
 
-  const msgCtx = runtime.reply.finalizeInboundContext({
+  const msgCtx = finalizeInboundContext({
     Body: extractBody(frame),
     From: payload.sender.id,
     To: accountId,
@@ -253,7 +255,7 @@ function handleInboundMessage(
     MessageSid: payload.message_id,
   });
 
-  void runtime.reply.dispatchReplyWithBufferedBlockDispatcher({
+  void dispatchReplyWithBufferedBlockDispatcher({
     ctx: msgCtx,
     cfg,
     dispatcherOptions: {
