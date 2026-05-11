@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import WebSocket from 'ws';
 import type { ChannelPlugin } from 'openclaw/plugin-sdk/core';
 import { resolveAgentRoute } from 'openclaw/plugin-sdk/routing';
+import { createChannelReplyPipeline } from 'openclaw/plugin-sdk/channel-reply-pipeline';
 import { dispatchReplyWithBufferedBlockDispatcher, finalizeInboundContext } from 'openclaw/plugin-sdk/reply-runtime';
 
 import {
@@ -243,22 +244,40 @@ function handleInboundMessage(
     peer: { kind: 'direct', id: payload.sender.id },
   });
 
+  const { onModelSelected, ...replyPipeline } = createChannelReplyPipeline({
+    cfg,
+    agentId: route.agentId,
+    channel: CHANNEL_ID,
+    accountId,
+  });
+
   const msgCtx = finalizeInboundContext({
     Body: extractBody(frame),
     From: payload.sender.id,
     To: accountId,
     SessionKey: route.sessionKey,
     AccountId: accountId,
-    Channel: CHANNEL_ID,
     ChatType: 'direct',
     Provider: CHANNEL_ID,
+    Surface: CHANNEL_ID,
+    OriginatingChannel: CHANNEL_ID,
+    OriginatingTo: payload.sender.id,
+    SenderId: payload.sender.id,
     MessageSid: payload.message_id,
   });
 
   void dispatchReplyWithBufferedBlockDispatcher({
     ctx: msgCtx,
     cfg,
+    replyOptions: {
+      onModelSelected,
+      // Override harness defaults (e.g. Codex's "message_tool") so the
+      // agent's automatic reply is delivered through our `deliver` callback
+      // instead of being suppressed in favor of the built-in message tool.
+      sourceReplyDeliveryMode: 'automatic',
+    },
     dispatcherOptions: {
+      ...replyPipeline,
       deliver: async (deliverPayload) => {
         const text = deliverPayload.text ?? '';
         const mediaUrls = collectMediaUrls(deliverPayload);
