@@ -29,30 +29,25 @@ export const setupWizard: ChannelSetupWizard = {
     },
   },
 
-  stepOrder: 'text-first',
+  // 配对码不是要持久化的 config 字段，只是触发 authExchange 的一次性输入；
+  // 因此不声明 textInputs/credentials，所有交互直接在 finalize 里手动 prompt
+  // （参考 extensions/twitch/src/setup-surface.ts 的写法）。
   credentials: [],
 
-  textInputs: [
-    {
-      inputKey: 'code',
-      message: '请输入小程序中显示的8位配对码',
-      required: true,
-      validate({ value }) {
-        if (!/^[0-9A-Z]{8}$/.test(value)) {
-          return '配对码必须是8位数字或大写字母';
-        }
-        return undefined;
-      },
-      // 配对码本身不能直接写进 config——它要先通过 authExchange 换 apiToken。
-      // 这里 no-op 避开 wizard 默认的 applyAccountConfig 路径，把真正的写入
-      // 留给下面的 finalize；同时让 setupAdapter.validateInput 只对非交互式
-      // `channels add --channel <id>` 起作用。
-      applySet: ({ cfg }) => cfg,
-    },
-  ],
-
-  async finalize({ cfg, accountId, credentialValues }) {
-    const code = credentialValues.code;
+  async finalize({ cfg, accountId, prompter }) {
+    const code = (
+      await prompter.text({
+        message: '请输入小程序中显示的8位配对码',
+        validate: (value) => {
+          const trimmed = value?.trim() ?? '';
+          if (!trimmed) return '请输入配对码';
+          if (!/^[0-9A-Z]{8}$/.test(trimmed)) {
+            return '配对码必须是8位数字或大写字母';
+          }
+          return undefined;
+        },
+      })
+    ).trim();
     if (!code) return;
 
     const result = await authExchange(code);
@@ -82,9 +77,8 @@ export const setupWizard: ChannelSetupWizard = {
 
 export const setupAdapter: ChannelSetupAdapter = createPatchedAccountSetupAdapter({
   channelKey: CHANNEL_ID,
-  // 配对码必须通过交互式向导输入，无法用 CLI flag 传入：
-  // 非交互式 `channels add --channel <id>` 路径不会跑 wizard 的 textInputs/finalize，
-  // 所以这里硬性拦截，引导用户走 `openclaw channels add` 或 `openclaw setup --wizard`。
+  // 配对码只能在交互式向导里输入：非交互的 `channels add --channel <id>` 路径
+  // 直接调 applyAccountConfig，不会跑 wizard 的 finalize，所以这里硬性拦截。
   validateInput: () =>
     '请使用 `openclaw channels add`（不要带 --channel）或 `openclaw setup --wizard` 启动交互式向导，按提示输入小程序中的 8 位配对码。',
   buildPatch: () => ({}),
