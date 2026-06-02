@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
 
-import WebSocket from 'ws';
 import type { ChannelPlugin } from 'openclaw/plugin-sdk/core';
 import { resolveAgentRoute } from 'openclaw/plugin-sdk/routing';
 import { createChannelReplyPipeline } from 'openclaw/plugin-sdk/channel-reply-pipeline';
@@ -85,7 +84,7 @@ function connectAndListen(ctx: GatewayContext): Promise<void> {
       } satisfies PingFrame);
     }
 
-    ws.on('open', () => {
+    ws.addEventListener('open', () => {
       log?.info?.('Connected to LSPlatform');
       reconnectAttempt = 0;
       registerConnection(accountId, ws, ctx);
@@ -102,8 +101,8 @@ function connectAndListen(ctx: GatewayContext): Promise<void> {
       pingInterval = setInterval(sendPing, 30_000);
     });
 
-    ws.on('message', (raw) => {
-      const text = String(raw);
+    ws.addEventListener('message', (event) => {
+      const text = String(event.data);
       log?.info?.(`WS RX << ${text}`);
 
       let msg: InboundFrame;
@@ -132,9 +131,9 @@ function connectAndListen(ctx: GatewayContext): Promise<void> {
       }
     });
 
-    ws.on('close', (code, reason) => {
+    ws.addEventListener('close', (event) => {
       clearInterval(pingInterval);
-      log?.info?.(`Disconnected from LSPlatform (code: ${code}, reason: ${reason})`);
+      log?.info?.(`Disconnected from LSPlatform (code: ${event.code}, reason: ${event.reason})`);
       if (abortSignal.aborted) return;
       unregisterConnection(accountId);
       ctx.setStatus({
@@ -146,12 +145,12 @@ function connectAndListen(ctx: GatewayContext): Promise<void> {
       scheduleReconnect();
     });
 
-    ws.on('error', (err) => {
-      log?.error?.(`WebSocket error: ${err.message}`);
+    ws.addEventListener('error', (event) => {
+      log?.error?.(`WebSocket error: ${event.message}`);
       ctx.setStatus({
         accountId,
         connected: false,
-        lastError: err.message,
+        lastError: event.message,
       });
     });
 

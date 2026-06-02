@@ -1,5 +1,3 @@
-import type WebSocket from 'ws';
-
 import type { McpToolCallFrame, OutboundFrame } from '@/api';
 import {
   assertAllowedDeviceToolName,

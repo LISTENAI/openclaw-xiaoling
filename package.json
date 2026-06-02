@@ -34,14 +34,12 @@
   },
   "dependencies": {
     "@sinclair/typebox": "^0.34.48",
-    "ky": "^2.0.0",
-    "ws": "^8.20.0"
+    "ky": "^2.0.0"
   },
   "devDependencies": {
     "@tsconfig/node24": "^24.0.4",
     "@tsconfig/strictest": "^2.0.8",
     "@types/node": "^24.12.0",
-    "@types/ws": "^8.18.1",
     "openclaw": "^2026.5.7",
     "tsdown": "^0.21.4",
     "typescript": "^5.9.3"
