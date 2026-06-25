@@ -16,6 +16,7 @@ const XIAOLING_REPLY_STYLE_PROMPT = [
   '- 使用口语化中文，像在说话而不是写文档。',
   '- 简洁直接，避免啰嗦，不要复述用户的问题，直接给答案。',
   '- 不要使用 Markdown（标题、列表、加粗、代码块等），也不要使用表情符号。',
+  '- 把回答控制在 200 字以内，尽量简短。',
 ].join('\n');
 
 export default defineChannelPluginEntry({
